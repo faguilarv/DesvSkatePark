@@ -5,5 +5,5 @@ const router = Router();
 
 router.post("/register", SkaterController.register);
 router.post("/login", SkaterController.login);
-
+router.post("/imagen", SkaterController.uploadImage);
 export default router;
