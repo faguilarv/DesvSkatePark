@@ -66,7 +66,7 @@ const uploadImage = (req, res) => {
       path.join(__dirname, "../public/imgs", `imagen-${posicion}.jpg`),
       (err) => {
         if (err) res.status(500).send(err);
-        res.redirect("/collage");
+        res.redirect("/login");
       }
     );
   } catch (error) {
