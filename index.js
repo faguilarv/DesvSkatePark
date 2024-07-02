@@ -1,24 +1,34 @@
-import "dotenv/config";
 import express from "express";
-import fileUploadConfig from "./utils/fileUploadConfig.js";
+import { engine } from "express-handlebars";
+import dotenv from "dotenv/config";
+import fileUpload from "express-fileupload";
 
-import skaterRouter from "./routes/skater.route.js";
+import routerUser from "./routes/skater.route.js";
 
+//express
 const app = express();
 
-//para habilitar req.body crear este middleware
-app.use(express.json());
-//si mandan formularios nativos de html usar urlencoded
-app.use(express.urlencoded({ extended: true }));
+// ruta absoluta
+const __dirname = import.meta.dirname;
 
+// middleware archivos estáticos
 app.use(express.static("public"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(
+  fileUpload({
+    limits: { fileSize: 5000000 }, //5mb
+    abortOnLimit: true,
+    responseOnLimit:
+      "El peso de la imagen que intentas subir supera el límite permitido",
+  })
+);
 
-app.use(fileUploadConfig);
+app.use("/", routerUser);
 
-//rutas /skaters
-app.use("/api/v1/skaters", skaterRouter);
+app.engine(".hbs", engine({ extname: ".hbs" }));
+app.set("view engine", ".hbs");
+app.set("views", __dirname + "/views");
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Srv_Conectado exitosamente al puerto ${PORT}`);
-});
+const PORT = process.env.PORT;
+app.listen(PORT, () => console.log("server andando... en el puerto " + PORT));

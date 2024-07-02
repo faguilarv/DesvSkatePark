@@ -1,81 +1,232 @@
-import bcryptjs from "bcryptjs";
-import { SkaterModel } from "../models/skaters.models.js";
-import { generateToken, verifyToken } from "../utils/jwtUtils.js";
-//upload image
+import { skaterModel } from "../models/skaters.models.js";
 import path from "path";
-import { fileURLToPath } from "url";
+import bcryptjs from "bcryptjs";
+import jwt from "jsonwebtoken";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = import.meta.dirname;
+const pathFile = path.join(__dirname, "../public");
 
-const register = async (req, res) => {
+export const registrar_get = async (req, res) => {
   try {
-    console.log(req.body);
-    const { email, nombre, password, anos_experiencia, especialidad } =
-      req.body;
-    if (!email || !nombre || !password || !anos_experiencia || !especialidad) {
+    res.render("registro");
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al registrar el usuario" });
+  }
+};
+
+export const registrar_post = async (req, res) => {
+  try {
+    const { email, nombre, password, experiencia, especialidad } = req.body;
+
+    if (!email || !nombre || !password || !especialidad) {
+      return res.status(400).json({ error: "Faltan campos" });
+    }
+
+    const user = await skaterModel.findOneByEmail(email);
+
+    if (user) {
       return res
         .status(400)
-        .json({ ok: false, msg: "All fields are required" });
+        .json({ error: "El Usuario o email ya esta registrado" });
     }
 
-    const skater = SkaterModel.findOneByEmail(email);
-    if (skater) {
-      return res
-        .status(409)
-        .json({ ok: false, msg: "Skater already exists try with other " });
+    if (!req.files || !req.files.foto_file) {
+      return res.status(400).send({ message: "No se cargo ningún archivo." });
     }
-    //creamos unos saltos salt o jump
-    const jump = await bcryptjs.genSalt(10);
-    const hashedPassword = await bcryptjs.hash(password, jump);
-    const newSkater = await SkaterModel.create({
+    const { foto_file } = req.files;
+    const dir_foto = `/assets/img/${nombre}.jpg`;
+    foto_file.mv(path.join(pathFile, dir_foto));
+
+    const skater = await skaterModel.createSkater({
       email,
       nombre,
-      password: hashedPassword,
-      anos_experiencia,
+      password,
+      experiencia,
       especialidad,
-      foto,
-      estado,
+      dir_foto,
+      role_id: 2,
+      estado: true,
     });
 
-    return res.status(201).json({ ok: true, msg: "newUser Skater Ok!!" });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      ok: false,
-      msg: "Server error try again o later",
-    });
-  }
-};
+    if (!skater) {
+      return res.status(400).json({ error: "No se pudo registrar el usuario" });
+    }
 
-const login = async (req, res) => {
-  try {
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      ok: false,
-      msg: "Server error try again o later",
-    });
-  }
-};
-const uploadImage = (req, res) => {
-  try {
-    const { target_file } = req.files;
-    const { posicion } = req.body;
-    target_file.mv(
-      path.join(__dirname, "../public/imgs", `imagen-${posicion}.jpg`),
-      (err) => {
-        if (err) res.status(500).send(err);
-        res.redirect("/login");
-      }
+    const userNew = await skaterModel.findOneByEmail(email);
+
+    const token = jwt.sign(
+      {
+        email: userNew.email,
+      },
+      process.env.JWT_SECRETKEY
     );
+
+    const skaters = await skaterModel.getAllSkaters();
+    res.redirect("/");
   } catch (error) {
-    res.status(500).send("Algo salió mal en la carga de la imagen.");
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al registrar el usuario" });
   }
 };
 
-export const SkaterController = {
-  register,
-  login,
-  uploadImage,
+export const login_post = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const emailLowerCase = email.toLowerCase();
+
+    const skater = await skaterModel.findOneByEmail(emailLowerCase);
+
+    if (!emailLowerCase || !password) {
+      return res.status(400).json({ error: "Faltan campos" });
+    }
+
+    if (!skater) {
+      return res.status(400).json({ error: "El Usuario no existe" });
+    }
+
+    if (password !== skater.password) {
+      return res.status(400).json({ error: "Contraseña incorrecta" });
+    }
+
+    const token = jwt.sign(
+      {
+        email: skater.email,
+        nombre: skater.nombre,
+        password: skater.password,
+        experiencia: skater.anos_experiencia,
+        especialidad: skater.especialidad,
+      },
+      process.env.JWT_SECRETKEY
+    );
+
+    return res.json({ ok: true, msg: { token, role_id: skater.role_id } });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al loguear el usuario" });
+  }
+};
+
+export const login_get = async (req, res) => {
+  try {
+    res.render("login");
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al loguear el usuario" });
+  }
+};
+
+export const getAdmin = async (req, res) => {
+  try {
+    const skaters = await skaterModel.getSkaters();
+
+    res.render("admin", { skaters: skaters });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al obtener los usuarios" });
+  }
+};
+
+export const getUser = async (req, res) => {
+  try {
+    const { email } = req.query;
+    const skater = await skaterModel.findOneByEmail(email);
+    res.render("datos", { skater: skater });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al obtener el usuario" });
+  }
+};
+
+export const getUserToken = async (req, res) => {
+  try {
+    const skater = await skaterModel.findOneByEmail(req.email);
+    res.json({ ok: true, skater: skater });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al obtener el usuario" });
+  }
+};
+
+export const getAllSkaters = async (req, res) => {
+  try {
+    const skaters = await skaterModel.getAllSkaters();
+    res.render("index", { skaters: skaters });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al obtener los usuarios" });
+  }
+};
+
+export const nuevoEstado = async (req, res) => {
+  try {
+    const { id, estado } = req.body;
+    const skater = await skaterModel.updateEstado({ id, estado });
+    res.json({ ok: true, msg: "Estado actualizado" });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al actualizar el estado del usuario" });
+  }
+};
+
+export const deleteUser = async (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email) {
+      return res
+        .status(400)
+        .json({ error: "Se requiere un email para eliminar al usuario" });
+    }
+
+    console.log(`Email recibido para eliminar: ${email}`);
+    const skater = await skaterModel.deleteUser(email);
+    if (!skater) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+    res.json({ ok: true, msg: "Usuario eliminado" });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salió mal al eliminar el usuario" });
+  }
+};
+
+export const updateSkater = async (req, res) => {
+  try {
+    const { email, nombre, password, experiencia, especialidad } = req.body;
+
+    const skater = await skaterModel.updateSkater({
+      email,
+      nombre,
+      password,
+      experiencia,
+      especialidad,
+    });
+
+    res.json({ ok: true, msg: "Usuario actualizado" });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json({ error: "Algo salio mal al actualizar el usuario" });
+  }
 };
